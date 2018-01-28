@@ -11,16 +11,51 @@ export default function IndexController(container) {
   this._registerServiceWorker();
 }
 
-// register service worker
 IndexController.prototype._registerServiceWorker = function() {
-  // if the browser doesn't support service workers, do a simple return
   if (!navigator.serviceWorker) return;
 
-  // if the browser support service workers, log a message if the service worker registration succeeds or fails
-  navigator.serviceWorker.register('/sw.js').then(function() {
-    console.log('Service worker registration worked');
-  }).catch(function() {
-    console.log('Service worker registration failed');
+  var indexController = this;
+
+  navigator.serviceWorker.register('/sw.js').then(function(reg) {
+    // TODO: if there's no controller, this page wasn't loaded
+    // via a service worker, so they're looking at the latest version.
+    // In that case, exit early
+    if (!navigator.serviceWorker.controller) return;
+
+    // TODO: if there's an updated worker already waiting, call
+    // indexController._updateReady()
+    if (reg.waiting) {
+      return indexController._updateReady();
+    }
+
+    // TODO: if there's an updated worker installing, track its
+    // progress. If it becomes "installed", call
+    // indexController._updateReady()
+    if (reg.installing) {
+      reg.installing.addEventListener('statechange', function() {
+        if (this.state === 'installed') {
+          return indexController._updateReady();
+        }
+      });
+    }
+
+    // TODO: otherwise, listen for new installing workers arriving.
+    // If one arrives, track its progress.
+    // If it becomes "installed", call
+    // indexController._updateReady()
+    reg.addEventListener('updatefound', function() {
+      reg.installing.addEventListener('statechange', function() {
+        if (this.state === 'installed') {
+          return indexController._updateReady();
+        }
+      });
+    });
+  });
+};
+
+IndexController.prototype._updateReady = function() {
+  var toast = this._toastsView.show("New version available", {
+    buttons: ['whatever']
   });
 };
 
