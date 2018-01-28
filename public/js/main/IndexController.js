@@ -11,16 +11,56 @@ export default function IndexController(container) {
   this._registerServiceWorker();
 }
 
-// register service worker
 IndexController.prototype._registerServiceWorker = function() {
-  // if the browser doesn't support service workers, do a simple return
   if (!navigator.serviceWorker) return;
 
-  // if the browser support service workers, log a message if the service worker registration succeeds or fails
-  navigator.serviceWorker.register('/sw.js').then(function() {
-    console.log('Service worker registration worked');
-  }).catch(function() {
-    console.log('Service worker registration failed');
+  var indexController = this;
+
+  navigator.serviceWorker.register('/sw.js').then(function(reg) {
+    if (!navigator.serviceWorker.controller) {
+      return;
+    }
+
+    if (reg.waiting) {
+      indexController._updateReady(reg.waiting);
+      return;
+    }
+
+    if (reg.installing) {
+      indexController._trackInstalling(reg.installing);
+      return;
+    }
+
+    reg.addEventListener('updatefound', function() {
+      indexController._trackInstalling(reg.installing);
+    });
+  });
+
+  // TODO: listen for the controlling service worker changing
+  // and reload the page
+  navigator.serviceWorker.addEventListener('controllerchange', funtion() {
+    window.location.reload();
+  });
+};
+
+IndexController.prototype._trackInstalling = function(worker) {
+  var indexController = this;
+  worker.addEventListener('statechange', function() {
+    if (worker.state == 'installed') {
+      indexController._updateReady(worker);
+    }
+  });
+};
+
+IndexController.prototype._updateReady = function(worker) {
+  var toast = this._toastsView.show("New version available", {
+    buttons: ['refresh', 'dismiss']
+  });
+
+  toast.answer.then(function(answer) {
+    if (answer != 'refresh') return;
+    // TODO: tell the service worker to skipWaiting
+    worker.postMessage(action: 'skipWaiting');
   });
 };
 
