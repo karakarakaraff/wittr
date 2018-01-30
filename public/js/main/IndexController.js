@@ -3,12 +3,12 @@ import ToastsView from './views/Toasts';
 import idb from 'idb';
 
 function openDatabase() {
-  // If the browser doesn't support service worker,
-  // we don't care about having a database
+  // If the browser doesn't support service worker, we don't care about having a database
   if (!navigator.serviceWorker) {
     return Promise.resolve();
   }
 
+  // Create the database store for posts. They will be keyed by their post ID, and they can be indexed by the time they were created.
   return idb.open('wittr', 1, function(upgradeDb) {
     var store = upgradeDb.createObjectStore('wittrs', {
       keyPath: 'id'
@@ -28,16 +28,20 @@ export default function IndexController(container) {
 
   var indexController = this;
 
+  // Clean the image cache every five minutes
   setInterval(function() {
     indexController._cleanImageCache();
   }, 1000 * 60 * 5);
 
+  // After showing the cached posts, and only after, open a websocket to get any new posts that have not yet been cached.
   this._showCachedMessages().then(function() {
     indexController._openSocket();
   });
 }
 
+// Register the service worker
 IndexController.prototype._registerServiceWorker = function() {
+  // if the browser doesn't support service workers, do a simple return
   if (!navigator.serviceWorker) return;
 
   var indexController = this;
@@ -47,16 +51,19 @@ IndexController.prototype._registerServiceWorker = function() {
       return;
     }
 
+    // Track the state of the service worker. If it's waiting, let the user know there's an update and they should refresh.
     if (reg.waiting) {
       indexController._updateReady(reg.waiting);
       return;
     }
 
+    // Track the state of the service worker. If it's installing, track if the install succeeds. If it succeeds, alert the user to the update.
     if (reg.installing) {
       indexController._trackInstalling(reg.installing);
       return;
     }
 
+    // Listen for an update, and if there is one, track if the install succeeds. If it succeeds, alert the user to the update.
     reg.addEventListener('updatefound', function() {
       indexController._trackInstalling(reg.installing);
     });
@@ -81,15 +88,18 @@ IndexController.prototype._showCachedMessages = function() {
     // posts from IDB
     if (!db || indexController._postsView.showingPosts()) return;
 
+    // Query the database for all of the posts in order of the time they were created (will put them in order of oldest to newest).
     var index = db.transaction('wittrs')
       .objectStore('wittrs').index('by-date');
 
+    // Return all of the posts, but reverse the index so they show from newest to oldest.
     return index.getAll().then(function(messages) {
       indexController._postsView.addPosts(messages.reverse());
     });
   });
 };
 
+// This is where we track the instalation of a new service worker and alert the user if the instalation succeeds.
 IndexController.prototype._trackInstalling = function(worker) {
   var indexController = this;
   worker.addEventListener('statechange', function() {
@@ -99,6 +109,7 @@ IndexController.prototype._trackInstalling = function(worker) {
   });
 };
 
+// This builds the little pop-up notification that alerts the user to an update. If the user chooses to update, we'll throw away the old service worker so the new service worker can skip waiting and immediately take control.
 IndexController.prototype._updateReady = function(worker) {
   var toast = this._toastsView.show("New version available", {
     buttons: ['refresh', 'dismiss']
@@ -155,6 +166,7 @@ IndexController.prototype._openSocket = function() {
   });
 };
 
+// Keep the image cache clean. Go to the database and get all of the JSON URL strings for photos and avatars connected to each message, then save those in the imagesNeeded array. After that, go to the cache and compare the URLs. If a URL in the cache is NOT included in the imagesNeeded array, delete it.
 IndexController.prototype._cleanImageCache = function() {
   return this._dbPromise.then(function(db) {
     if (!db) return;
@@ -183,6 +195,7 @@ IndexController.prototype._cleanImageCache = function() {
 };
 
 // called when the web socket sends message data
+// Keep the database clean by only keeping the most recent 30 posts from the wittrs store and deleting the rest.
 IndexController.prototype._onSocketMessage = function(data) {
   var messages = JSON.parse(data);
 
