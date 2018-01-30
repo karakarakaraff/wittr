@@ -70,6 +70,16 @@ function servePhoto(request) {
   // to the browser.
   //
   // HINT: cache.put supports a plain url as the first parameter
+  return caches.open(contentImgsCache).then(function(cache) {
+    return cache.match(storageUrl).then(function(response) {
+      if (response) return response;
+
+      return fetch(request).then(function(networkResponse) {
+        cache.put(storageUrl, networkResponse.clone());
+        return networkResponse;
+      });
+    });
+  });
 }
 
 self.addEventListener('message', function(event) {
